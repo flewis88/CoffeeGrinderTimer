@@ -20,3 +20,5 @@ Rotary Encoder connections
 
 Commenting is limited, and code is kinda cobbled together. I may refine it.
 Video coming after final assembly.
+
+![alt text](https://raw.githubusercontent.com/flewis88/CoffeeGrinderTimer/main/Proto.jpg)
