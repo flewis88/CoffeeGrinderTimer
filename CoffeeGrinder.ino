@@ -2,8 +2,8 @@
 Coffee Grinder timer
 
 - Rotary encoder rotation adjusts time duration.
-- Pushing encoder powers the relay for set duration, and stores changed duration to EEPROM
-- Holding Calibration button allows rotary encoder to adjust the dose weight for the given duration, changing the time/weight ratio
+- Pushing encoder allows rotary encoder to adjust the calibration between dose weight and the given duration, changing the time/weight ratio
+- Pressing the Grind button powers the relay for set duration, and stores changed duration to EEPROM
 - Releasing the Calibration button stores dose weight to EEPROM
 */
 
@@ -29,14 +29,15 @@ Coffee Grinder timer
 
 //RELAY
 #define RELAYSIGNAL        6
+#define LEDPIN             7
 
 // Rotary Encoder Inputs
 #define CLK 2
 #define DT 3
-#define SW 4
+#define CAL 4
 
 //CALIBRATION BUTTON
-#define CAL 5
+#define SW 5
 
 //Initialise the LCD
 LiquidCrystal_I2C      lcd(I2C_ADDR, En_pin,Rw_pin,Rs_pin,D4_pin,D5_pin,D6_pin,D7_pin);
@@ -53,7 +54,9 @@ int byteMax = 255;
 unsigned int grindTimeINT = EEPROM.read(timeAddr);
 unsigned int grindWeightINT = EEPROM.read(weightAddr);
 float grindTime = float(grindTimeINT)/10; //1 byte max allows max 25.5 second grind time
+float grindTimeRemaining = grindTime;
 float grindWeight = float(grindWeightINT)*0.2; //1 byte max allows max 51 gram dose
+float grindWeightRemaining = grindWeight; //1 byte max allows max 51 gram dose
 float grindCoeff = float(grindWeightINT)/float(grindTimeINT);
 
 
@@ -93,6 +96,10 @@ void setup()
     //Configure relay pin, and set to LOW
     pinMode(RELAYSIGNAL, OUTPUT);
     digitalWrite(RELAYSIGNAL,LOW);
+
+    //Configure LED pin, and set to LOW
+    pinMode(LEDPIN, OUTPUT);
+    digitalWrite(LEDPIN,LOW);
     
     lcd.setCursor(3, 0);
     lcd.print("GRINDY BOI");
@@ -132,10 +139,6 @@ void grindRun()
 {
   //Compare EEPROM value to variable, and write new value to EEPROM if changed
   timeEERead = EEPROM.read(timeAddr);
-  //Serial.print("Grind Time INT: ");
-  //Serial.println(grindTimeINT);
-  //Serial.print("EEPROM: ");
-  //Serial.println(timeEERead);
   if (timeEERead != grindTimeINT)
   {
     EEPROM.write(timeAddr, grindTimeINT);
@@ -146,22 +149,36 @@ void grindRun()
   lcd.clear();
   lcd.setCursor(4, 0);
   lcd.print("GRINDING"); 
-  lcd.setCursor(3, 1);
-  lcd.print("UP A STORM");
 
   previousMillis = millis();
   unsigned long startMillis = millis();
-  //unsigned long currentMillis = millis();
   //Turn on Relay
   digitalWrite(RELAYSIGNAL,HIGH);
+  digitalWrite(LEDPIN,HIGH);
 
   //Relay powered for defined duration
   while (millis() - startMillis < (grindTimeINT*100)) {
     // Loop til grind time passed.
+    grindTimeRemaining = grindTime - float(millis()- startMillis)/1000;
+    grindWeightRemaining = grindWeight * (float(millis()- startMillis)/1000)/grindTime;
+    lcd.setCursor(0, 1);
+    lcd.print(grindTimeRemaining,1);
+    lcd.print(" "); 
+    lcd.setCursor(4, 1);
+    lcd.print("sec");
+    lcd.setCursor(10, 1);
+    lcd.print(grindWeightRemaining,1);
+    lcd.print(" "); 
+    lcd.setCursor(14, 1);
+    lcd.print("g");    
+    
+    Serial.println(grindTimeRemaining);
+    delay(100);
   } 
    
   //Turn off Relay
   digitalWrite(RELAYSIGNAL,LOW);
+  digitalWrite(LEDPIN,LOW);
 
   lcd.clear();
   lcd.setCursor(1, 0);
@@ -186,7 +203,7 @@ void encoderCheck()
     // the encoder is rotating CCW so decrement
     if (calMode==0){
       if (digitalRead(DT) != currentStateCLK) {
-        //Serial.println("Grind Time Change");
+
         if (grindTimeINT != byteMin)
         {
           grindTimeINT--;
@@ -200,21 +217,15 @@ void encoderCheck()
       }
       
       grindTime=float(grindTimeINT)/10;
-      /*
-      Serial.print("Time changed to ");
-      Serial.println(grindTime);
-      */
+
       grindWeightINT = grindTimeINT * grindCoeff; 
       grindWeight = float(grindWeightINT)*0.2;
-      /*
-      Serial.print("Grind Weight Updated to ");
-      Serial.println(grindWeight); 
-      */
+
       screenUpdate();    
     }
     else if (calMode == 1){
       if (digitalRead(DT) != currentStateCLK) {
-        //Serial.println("Calibration Change");
+
         if (grindWeightINT != byteMin)
         {
           grindWeightINT--;
@@ -227,22 +238,12 @@ void encoderCheck()
         }
       }
       grindWeight = float(grindWeightINT)*0.2;
-      /* 
-      Serial.print("Weight changed to ");
-      Serial.println(grindWeight);
-      Serial.println("Grind Coeff Updated");
-      */
+
       grindCoeff = float(grindWeightINT)/float(grindTimeINT);
       screenUpdate();
               
     }
 
-   /*
-   Serial.print("Grind Time Display: ");
-   Serial.println(grindTime,1); 
-   Serial.print("Grind Weight Display: ");
-   Serial.println(grindWeight);
-   */
   }
 
   // Remember last CLK state
@@ -277,10 +278,6 @@ void calCheck()
     Serial.println("Saving Calibration");
     EEPROM.write(weightAddr, grindWeightINT);
     Serial.println("Grind Weight changed. New weight stored to EEPROM");
-    //unnecessary update to grindCoeff?
-    //grindCoeff = float(grindWeightINT)/float(grindTimeINT);
-    //Serial.print("Grind Coeff changed: ");
-    //Serial.println(grindCoeff);
     lcd.clear();
     lcd.setCursor(3, 0);
     lcd.print("GRINDY BOI");
@@ -319,7 +316,6 @@ void screenUpdate(){
     lcd.setCursor(4, 1);
     lcd.print("sec"); 
     lcd.setCursor(11, 1);
-    //lcd.print("    ");
     lcd.setCursor(10, 1);
     lcd.print(grindWeight,1); 
     lcd.setCursor(14, 1);
